@@ -1,113 +1,70 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import axios from 'axios';
+// src/contexts/AuthContext.jsx
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import { loginUser } from '../services/api';
 
-// Create context
-const AuthContext = createContext(null);
+// 1. Create the AuthContext
+export const AuthContext = createContext();
 
-// Create a provider component
+// 2. Create the AuthProvider component
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Check if user is authenticated on mount
   useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          // In a real application, verify the token with your backend
-          // const response = await axios.get('/api/auth/me', {
-          //   headers: { Authorization: `Bearer ${token}` }
-          // });
-          // setUser(response.data);
-          
-          // For now, let's simulate a user
-          setUser({
-            id: 1,
-            name: 'Dr. John Doe',
-            email: 'john.doe@example.com',
-            role: 'doctor'
-          });
-        } catch (error) {
-          console.error('Authentication error:', error);
-          localStorage.removeItem('token');
-        }
-      }
-      setLoading(false);
-    };
-
-    checkAuth();
+    // Check for saved user in localStorage on app initialization
+    const savedUser = localStorage.getItem('ehrUser');
+    if (savedUser) {
+      setCurrentUser(JSON.parse(savedUser));
+    }
+    setLoading(false);
   }, []);
 
-  // Login function
-  const login = async (email, password) => {
+  const login = async (username, password, role) => {
     try {
-      // In a real application, make an API call to your backend
-      // const response = await axios.post('/api/auth/login', { email, password });
-      // const { token, user } = response.data;
-      
-      // For now, let's simulate a successful login
-      const token = 'fake-jwt-token';
-      const userData = {
-        id: 1,
-        name: 'Dr. John Doe',
-        email: email,
-        role: 'doctor'
-      };
-      
-      localStorage.setItem('token', token);
-      setUser(userData);
-      
-      return { success: true };
+      const response = await loginUser(username, password, role);
+
+      if (response.success) {
+        setCurrentUser(response.user);
+        localStorage.setItem('ehrUser', JSON.stringify(response.user));
+        return response.user;
+      }
     } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Login failed'
-      };
+      console.error('Login error:', error);
+      throw error;
     }
   };
 
-  // Logout function
   const logout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
+    setCurrentUser(null);
+    localStorage.removeItem('ehrUser');
   };
 
-  // Register function
-  const register = async (userData) => {
-    try {
-      // In a real application, make an API call to your backend
-      // const response = await axios.post('/api/auth/register', userData);
-      
-      // For now, let's simulate a successful registration
-      return { success: true };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Registration failed'
-      };
+  const hasRole = (roles) => {
+    if (!currentUser) return false;
+
+    if (Array.isArray(roles)) {
+      return roles.includes(currentUser.role);
     }
+
+    return currentUser.role === roles;
   };
 
   const value = {
-    user,
-    loading,
+    currentUser,
     login,
     logout,
-    register,
-    isAuthenticated: !!user
+    hasRole,
+    isAuthenticated: !!currentUser,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 };
 
-// Custom hook to use the auth context
+// 3. Create and export useAuth hook
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === null) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  return useContext(AuthContext);
 };
-
-export default AuthContext;
