@@ -45,25 +45,32 @@ const validationSchema = yup.object({
     .required('Confirm password is required'),
   role: yup
     .string()
+    .oneOf(['admin', 'doctor', 'nurse', 'staff'], 'Invalid role')
     .required('Role is required'),
   specialization: yup
     .string()
     .when('role', {
       is: 'doctor',
-      then: yup.string().required('Specialization is required for doctors')
+      then: (schema) => schema.required('Specialization is required for doctors'),
+      otherwise: (schema) => schema.optional()
     }),
   licenseNumber: yup
     .string()
     .when('role', {
       is: 'doctor',
-      then: yup.string().required('License number is required for doctors')
+      then: (schema) => schema.required('License number is required for doctors'),
+      otherwise: (schema) => schema.optional()
     }),
+  agreeTerms: yup
+    .boolean()
+    .oneOf([true], 'You must agree to the terms and conditions')
+    .required('You must agree to the terms and conditions')
 });
 
 const Register = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [error, setError] = useState('');
+  const [localError, setLocalError] = useState('');
 
   const formik = useFormik({
     initialValues: {
@@ -75,25 +82,31 @@ const Register = () => {
       role: 'staff',
       specialization: '',
       licenseNumber: '',
+      agreeTerms: false
     },
     validationSchema: validationSchema,
-    onSubmit: async (values) => {
+    onSubmit: async (values, { setSubmitting }) => {
+      setLocalError('');
+      console.log('Register attempt:', values);
       try {
         const result = await register(values);
+        console.log('Register response:', result);
         if (result.success) {
           navigate('/login');
         } else {
-          setError(result.error);
+          setLocalError(result.error || 'Registration failed');
         }
       } catch (err) {
-        setError('An unexpected error occurred. Please try again later.');
+        console.error('Register error:', err);
+        setLocalError(err.response?.data?.message || err.message || 'An unexpected error occurred. Please try again later.');
+      } finally {
+        setSubmitting(false);
       }
     },
   });
 
   return (
     <Grid container sx={{ height: '100vh' }}>
-      {/* Left Side - Blue Section */}
       <Grid 
         item 
         xs={false} 
@@ -170,7 +183,6 @@ const Register = () => {
         </Box>
       </Grid>
       
-      {/* Right Side - Registration Form */}
       <Grid 
         item 
         xs={12} 
@@ -224,9 +236,9 @@ const Register = () => {
             onSubmit={formik.handleSubmit}
             sx={{ mt: 2 }}
           >
-            {error && (
+            {localError && (
               <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
+                {localError}
               </Alert>
             )}
             
@@ -362,9 +374,19 @@ const Register = () => {
               
               <Grid item xs={12}>
                 <FormControlLabel
-                  control={<Checkbox value="remember" color="primary" />}
+                  control={
+                    <Checkbox
+                      name="agreeTerms"
+                      checked={formik.values.agreeTerms}
+                      onChange={formik.handleChange}
+                      color="primary"
+                    />
+                  }
                   label="I agree to the terms and conditions"
                 />
+                {formik.touched.agreeTerms && formik.errors.agreeTerms && (
+                  <FormHelperText error>{formik.errors.agreeTerms}</FormHelperText>
+                )}
               </Grid>
             </Grid>
             
@@ -382,6 +404,7 @@ const Register = () => {
                   bgcolor: '#1976d2'
                 }
               }}
+              disabled={formik.isSubmitting}
             >
               REGISTER
             </Button>

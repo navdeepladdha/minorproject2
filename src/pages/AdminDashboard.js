@@ -1,6 +1,6 @@
-// src/pages/AdminDashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { fetchAdminData } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { fetchAdminData, createDepartment } from '../services/api';
 import {
   Box,
   Typography,
@@ -16,14 +16,20 @@ import {
   Chip,
   CircularProgress,
   Alert,
-  AlertTitle
+  AlertTitle,
+  Modal,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import ErrorIcon from '@mui/icons-material/Error';
 import WarningIcon from '@mui/icons-material/Warning';
 import InfoIcon from '@mui/icons-material/Info';
 
 const AdminDashboard = () => {
-  // Initialize with empty arrays to prevent mapping errors
+  const { currentUser } = useAuth();
   const [data, setData] = useState({
     staff: [],
     departments: [],
@@ -31,43 +37,80 @@ const AdminDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [departmentForm, setDepartmentForm] = useState({
+    name: '',
+    staffCount: 0,
+    patientCount: 0,
+    budget: 0
+  });
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const result = await fetchAdminData();
+        console.log('Fetching admin data with token:', currentUser?.token);
+        const result = await fetchAdminData(currentUser?.token);
+        console.log('Admin data received:', result);
         setData(result);
       } catch (err) {
         setError('Failed to load admin data');
-        console.error(err);
+        console.error('Admin data error:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    loadData();
-  }, []);
+    if (currentUser?.token) {
+      loadData();
+    } else {
+      setError('No authentication token available');
+      setLoading(false);
+    }
+  }, [currentUser]);
+
+  const handleModalOpen = () => setModalOpen(true);
+  const handleModalClose = () => {
+    setModalOpen(false);
+    setDepartmentForm({ name: '', staffCount: 0, patientCount: 0, budget: 0 });
+  };
+
+  const handleDepartmentChange = (e) => {
+    const { name, value } = e.target;
+    setDepartmentForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleDepartmentSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      console.log('Creating department:', departmentForm);
+      await createDepartment(departmentForm, currentUser?.token);
+      const result = await fetchAdminData(currentUser?.token);
+      setData(result);
+      handleModalClose();
+    } catch (err) {
+      setError('Failed to create department');
+      console.error('Department creation error:', err);
+    }
+  };
 
   if (loading) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
       <CircularProgress />
     </Box>
   );
-  
+
   if (error) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
       <Alert severity="error">{error}</Alert>
     </Box>
   );
 
-  // Helper function to determine status chip color
   const getStatusColor = (status) => {
     if (status === 'Active') return 'success';
     if (status === 'On Leave') return 'warning';
     return 'error';
   };
 
-  // Helper function to determine alert severity and icon
   const getAlertProps = (type) => {
     switch (type) {
       case 'critical':
@@ -85,9 +128,8 @@ const AdminDashboard = () => {
       <Typography variant="h4" component="h2" sx={{ mb: 4, fontWeight: 'bold' }}>
         Admin Dashboard
       </Typography>
-      
+
       <Grid container spacing={3}>
-        {/* Staff List */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3, borderRadius: 2, boxShadow: 3 }}>
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 'medium' }}>
@@ -111,8 +153,8 @@ const AdminDashboard = () => {
                         <TableCell>{person.role}</TableCell>
                         <TableCell>{person.department}</TableCell>
                         <TableCell>
-                          <Chip 
-                            label={person.status} 
+                          <Chip
+                            label={person.status}
                             color={getStatusColor(person.status)}
                             size="small"
                           />
@@ -132,7 +174,6 @@ const AdminDashboard = () => {
           </Paper>
         </Grid>
 
-        {/* Department Stats */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3, borderRadius: 2, boxShadow: 3 }}>
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 'medium' }}>
@@ -151,7 +192,7 @@ const AdminDashboard = () => {
                 <TableBody>
                   {data.departments && data.departments.length > 0 ? (
                     data.departments.map((dept) => (
-                      <TableRow key={dept.id} hover>
+                      <TableRow key={dept._id} hover>
                         <TableCell>{dept.name}</TableCell>
                         <TableCell>{dept.staffCount}</TableCell>
                         <TableCell>{dept.patientCount}</TableCell>
@@ -172,7 +213,6 @@ const AdminDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* System Alerts */}
       <Paper sx={{ mt: 3, p: 3, borderRadius: 2, boxShadow: 3 }}>
         <Typography variant="h6" sx={{ mb: 2, fontWeight: 'medium' }}>
           System Alerts
@@ -180,9 +220,9 @@ const AdminDashboard = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {data.alerts && data.alerts.length > 0 ? (
             data.alerts.map((alert) => {
-              const { severity } = getAlertProps(alert.type);
+              const { severity, icon } = getAlertProps(alert.type);
               return (
-                <Alert key={alert.id} severity={severity} variant="outlined">
+                <Alert key={alert.id} severity={severity} icon={icon} variant="outlined">
                   <AlertTitle>{alert.title}</AlertTitle>
                   {alert.message}
                 </Alert>
@@ -196,54 +236,126 @@ const AdminDashboard = () => {
         </Box>
       </Paper>
 
-      {/* Quick Actions */}
       <Paper sx={{ mt: 3, p: 3, borderRadius: 2, boxShadow: 3 }}>
         <Typography variant="h6" sx={{ mb: 2, fontWeight: 'medium' }}>
           Administrative Actions
         </Typography>
         <Grid container spacing={2}>
           <Grid item xs={6} md={3}>
-            <Button 
-              variant="contained" 
+            <Button
+              variant="contained"
               fullWidth
               color="primary"
               sx={{ p: 1.5 }}
+              onClick={handleModalOpen}
             >
-              Manage Users
+              Create Department
             </Button>
           </Grid>
           <Grid item xs={6} md={3}>
-            <Button 
-              variant="contained" 
+            <Button
+              variant="contained"
               fullWidth
               color="success"
               sx={{ p: 1.5 }}
+              disabled
             >
               System Settings
             </Button>
           </Grid>
           <Grid item xs={6} md={3}>
-            <Button 
-              variant="contained" 
+            <Button
+              variant="contained"
               fullWidth
               color="secondary"
               sx={{ p: 1.5 }}
+              disabled
             >
               View Reports
             </Button>
           </Grid>
           <Grid item xs={6} md={3}>
-            <Button 
-              variant="contained" 
+            <Button
+              variant="contained"
               fullWidth
               color="warning"
               sx={{ p: 1.5 }}
+              disabled
             >
               Audit Logs
             </Button>
           </Grid>
         </Grid>
       </Paper>
+
+      <Modal open={modalOpen} onClose={handleModalClose}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 400,
+            bgcolor: 'background.paper',
+            boxShadow: 24,
+            p: 4,
+            borderRadius: 2
+          }}
+        >
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Create Department
+          </Typography>
+          <Box component="form" onSubmit={handleDepartmentSubmit}>
+            <TextField
+              fullWidth
+              label="Department Name"
+              name="name"
+              value={departmentForm.name}
+              onChange={handleDepartmentChange}
+              margin="normal"
+              required
+            />
+            <TextField
+              fullWidth
+              label="Staff Count"
+              name="staffCount"
+              type="number"
+              value={departmentForm.staffCount}
+              onChange={handleDepartmentChange}
+              margin="normal"
+              required
+            />
+            <TextField
+              fullWidth
+              label="Patient Count"
+              name="patientCount"
+              type="number"
+              value={departmentForm.patientCount}
+              onChange={handleDepartmentChange}
+              margin="normal"
+              required
+            />
+            <TextField
+              fullWidth
+              label="Budget"
+              name="budget"
+              type="number"
+              value={departmentForm.budget}
+              onChange={handleDepartmentChange}
+              margin="normal"
+              required
+            />
+            <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+              <Button type="submit" variant="contained" color="primary">
+                Create
+              </Button>
+              <Button variant="outlined" onClick={handleModalClose}>
+                Cancel
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      </Modal>
     </Box>
   );
 };

@@ -1,89 +1,116 @@
-// src/services/api.js
-const mockUsers = [
-    { username: "doctor1", password: "password1", role: "doctor", name: "Dr. John Smith" },
-    { username: "nurse1", password: "password1", role: "nurse", name: "Nancy Brown" },
-    { username: "admin1", password: "password1", role: "admin", name: "Admin User" },
-    { username: "staff1", password: "password1", role: "staff", name: "Staff Member" }
-  ];
-  
-  export const loginUser = async (username, password, role) => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-  
-    // Find user with matching credentials
-    const user = mockUsers.find(
-      user => user.username === username && 
-              user.password === password &&
-              (role ? user.role === role : true)
-    );
-  
-    if (user) {
-      return {
-        success: true,
-        user: {
-          username: user.username,
-          role: user.role,
-          name: user.name
-        }
-      };
-    } else {
-      throw new Error("Invalid credentials or role");
-    }
-  };
-  
-  // You can add more API functions here for different role-based operations
-  export const fetchDoctorData = async () => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return {
-      patients: [
-        { id: 1, name: "Alice Johnson", age: 45, diagnosis: "Hypertension" },
-        { id: 2, name: "Bob Miller", age: 32, diagnosis: "Diabetes" },
-        { id: 3, name: "Carol Davis", age: 28, diagnosis: "Asthma" }
-      ],
-      appointments: [
-        { id: 1, patient: "Alice Johnson", time: "10:00 AM", date: "2025-04-19" },
-        { id: 2, patient: "Bob Miller", time: "11:30 AM", date: "2025-04-19" }
-      ]
-    };
-  };
-  
-  export const fetchNurseData = async () => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return {
-      patientVitals: [
-        { patient: "Alice Johnson", bp: "120/80", temp: "98.6°F", pulse: 72 },
-        { patient: "Bob Miller", bp: "130/85", temp: "99.1°F", pulse: 75 }
-      ],
-      medications: [
-        { patient: "Alice Johnson", medication: "Lisinopril", dosage: "10mg", schedule: "Daily" },
-        { patient: "Bob Miller", medication: "Metformin", dosage: "500mg", schedule: "Twice daily" }
-      ]
-    };
-  };
-  
-  export const fetchAdminData = async () => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return {
-      users: mockUsers.map(u => ({ username: u.username, role: u.role, name: u.name })),
-      systemStats: {
-        activeUsers: 24,
-        patientsToday: 45,
-        pendingTasks: 12
-      }
-    };
-  };
-  
-  export const fetchStaffData = async () => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return {
-      appointments: [
-        { id: 1, patient: "Alice Johnson", doctor: "Dr. John Smith", time: "10:00 AM", date: "2025-04-19" },
-        { id: 2, patient: "Bob Miller", doctor: "Dr. John Smith", time: "11:30 AM", date: "2025-04-19" },
-        { id: 3, patient: "Carol Davis", doctor: "Dr. Sarah Jones", time: "2:15 PM", date: "2025-04-19" }
-      ],
-      registrations: [
-        { id: 101, name: "David Wilson", date: "2025-04-18", insurance: "Blue Cross" },
-        { id: 102, name: "Eva Martinez", date: "2025-04-18", insurance: "Aetna" }
-      ]
-    };
-  };
+import axios from 'axios';
+
+const API = axios.create({
+  baseURL: 'http://localhost:5000/api',
+});
+
+// Utility functions
+export const calculateAge = (dob) => {
+  const diff = Date.now() - new Date(dob).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+};
+
+export const formatDate = (date) => {
+  return new Date(date).toLocaleDateString();
+};
+
+export const getRelativeTimeString = (date) => {
+  const diff = Date.now() - new Date(date).getTime();
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  if (hours < 24) return `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} days ago`;
+};
+
+// Auth and user functions
+export const getCurrentUser = async (token) => {
+  const response = await API.get('/auth/me', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const registerUser = async (userData) => {
+  const response = await API.post('/auth/register', userData);
+  return response.data;
+};
+
+export const loginUser = async (credentials) => {
+  const response = await API.post('/auth/login', credentials);
+  return response.data;
+};
+
+// Admin functions
+export const fetchAdminData = async (token) => {
+  const response = await API.get('/admin/dashboard', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const fetchUsers = async (token) => {
+  const response = await API.get('/admin/users', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const createDepartment = async (departmentData, token) => {
+  const response = await API.post('/admin/departments', departmentData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// Doctor functions
+export const fetchDoctorData = async (token) => {
+  const response = await API.get('/doctor/dashboard', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const fetchPatientDetails = async (patientId, token) => {
+  const response = await API.get(`/doctor/patients/${patientId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const createPrescription = async (prescriptionData, token) => {
+  const response = await API.post('/doctor/prescriptions', prescriptionData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// Nurse functions
+export const fetchNurseData = async (token) => {
+  const response = await API.get('/nurse/dashboard', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const updatePatientVitals = async (patientId, vitalsData, token) => {
+  const response = await API.put(`/nurse/patients/${patientId}/vitals`, vitalsData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// Staff functions
+export const fetchStaffData = async (token) => {
+  const response = await API.get('/staff/dashboard', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// Patient functions
+export const registerPatient = async (patientData, token) => {
+  const response = await API.post('/patients', patientData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};

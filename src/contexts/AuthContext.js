@@ -1,70 +1,98 @@
-// src/contexts/AuthContext.jsx
-import React, { createContext, useState, useEffect, useContext } from 'react';
-import { loginUser } from '../services/api';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { loginUser, registerUser, getCurrentUser } from '../services/api';
 
-// 1. Create the AuthContext
 export const AuthContext = createContext();
 
-// 2. Create the AuthProvider component
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    // Check for saved user in localStorage on app initialization
-    const savedUser = localStorage.getItem('ehrUser');
-    if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
+    const token = localStorage.getItem('token');
+    if (token) {
+      getCurrentUser(token)
+        .then((data) => {
+          if (data.success) {
+            setCurrentUser({
+              ...data.user,
+              token,
+              name: `${data.user.firstName} ${data.user.lastName}`
+            });
+          }
+        })
+        .catch((err) => console.error('Failed to fetch current user:', err))
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
-  const login = async (username, password, role) => {
+  const login = async ({ email, password, role }) => {
+    setError('');
     try {
-      const response = await loginUser(username, password, role);
-
-      if (response.success) {
-        setCurrentUser(response.user);
-        localStorage.setItem('ehrUser', JSON.stringify(response.user));
-        return response.user;
+      const data = await loginUser({ email, password, role });
+      if (data.success) {
+        localStorage.setItem('token', data.token);
+        const userData = await getCurrentUser(data.token);
+        if (userData.success) {
+          const user = {
+            ...userData.user,
+            token: data.token,
+            name: `${userData.user.firstName} ${userData.user.lastName}`
+          };
+          setCurrentUser(user);
+          return { success: true, user };
+        }
+        throw new Error('Failed to fetch user data');
       }
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+      setError(data.message || 'Login failed');
+      throw new Error(data.message || 'Login failed');
+    } catch (err) {
+      setError(err.message || 'An unexpected error occurred');
+      throw err;
+    }
+  };
+
+  const register = async (userData) => {
+    setError('');
+    try {
+      const data = await registerUser(userData);
+      if (data.success) {
+        localStorage.setItem('token', data.token);
+        const userData = await getCurrentUser(data.token);
+        if (userData.success) {
+          const user = {
+            ...userData.user,
+            token: data.token,
+            name: `${userData.user.firstName} ${userData.user.lastName}`
+          };
+          setCurrentUser(user);
+          return { success: true, user };
+        }
+        throw new Error('Failed to fetch user data');
+      }
+      setError(data.message || 'Registration failed');
+      throw new Error(data.message || 'Registration failed');
+    } catch (err) {
+      setError(err.message || 'An unexpected error occurred');
+      throw err;
     }
   };
 
   const logout = () => {
+    localStorage.removeItem('token');
     setCurrentUser(null);
-    localStorage.removeItem('ehrUser');
+    setError('');
   };
 
-  const hasRole = (roles) => {
-    if (!currentUser) return false;
-
-    if (Array.isArray(roles)) {
-      return roles.includes(currentUser.role);
-    }
-
-    return currentUser.role === roles;
-  };
-
-  const value = {
-    currentUser,
-    login,
-    logout,
-    hasRole,
-    isAuthenticated: !!currentUser,
-  };
+  const isAuthenticated = !!currentUser;
 
   return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
+    <AuthContext.Provider value={{ currentUser, login, register, logout, loading, error, isAuthenticated }}>
+      {children}
     </AuthContext.Provider>
   );
 };
 
-// 3. Create and export useAuth hook
-export const useAuth = () => {
-  return useContext(AuthContext);
-};
+export const useAuth = () => useContext(AuthContext);

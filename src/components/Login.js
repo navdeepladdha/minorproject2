@@ -1,7 +1,6 @@
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { AuthContext } from '../contexts/AuthContext';
-// Import Material UI components as used in your Register.js
 import {
   Avatar,
   Button,
@@ -15,51 +14,37 @@ import {
   MenuItem,
   Select,
   InputLabel,
-  FormControl,
-  FormControlLabel,
-  Checkbox
+  FormControl
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 const Login = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-
-  const { login } = useContext(AuthContext);
+  const [localError, setLocalError] = useState('');
+  const { login, error } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setIsLoading(true);
+    setLocalError('');
+    console.log('Login attempt:', { email, password, role });
+
+    if (!email || !password || !role) {
+      setLocalError('Please fill in all fields');
+      return;
+    }
 
     try {
-      await login(username, password, role);
-
-      switch (role) {
-        case 'doctor':
-          navigate('/doctor-dashboard');
-          break;
-        case 'nurse':
-          navigate('/nurse-dashboard');
-          break;
-        case 'admin':
-          navigate('/admin-dashboard');
-          break;
-        case 'staff':
-          navigate('/staff-dashboard');
-          break;
-        default:
-          navigate('/dashboard');
+      const response = await login({ email, password, role });
+      console.log('Login response:', response);
+      if (response.success) {
+        navigate(`/${role}-dashboard`);
       }
     } catch (err) {
-      setError(err.message || 'Login failed. Please check your credentials.');
-    } finally {
-      setIsLoading(false);
+      console.error('Login error:', err);
+      setLocalError(err.message || 'Login failed. Please try again.');
     }
   };
 
@@ -83,35 +68,7 @@ const Login = () => {
           padding: 4
         }}
       >
-        <Box sx={{ color: 'white', px: 4 }}>
-          <Typography component="h1" variant="h3" sx={{ mb: 4, fontWeight: 'bold' }}>
-            Healthcare Information at Your Fingertips
-          </Typography>
-          <Typography variant="body1" sx={{ mb: 4, color: '#e0f2fe' }}>
-            Securely access and manage patient records with our comprehensive EHR system designed for healthcare professionals.
-          </Typography>
-          <Paper 
-            elevation={0}
-            sx={{
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)',
-              p: 3,
-              borderRadius: 2,
-              maxWidth: '500px'
-            }}
-          >
-            <Typography variant="body1" sx={{ color: 'white', fontStyle: 'italic' }}>
-              "This EHR system has streamlined our patient management process and improved our overall efficiency."
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-              <Avatar sx={{ bgcolor: '#60a5fa', color: '#1e3a8a' }}>DN</Avatar>
-              <Box sx={{ ml: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: 'white' }}>Dr. NAV</Typography>
-                <Typography variant="caption" sx={{ color: '#bfdbfe' }}>Chief Medical Officer</Typography>
-              </Box>
-            </Box>
-          </Paper>
-        </Box>
+        {/* Placeholder for left side content */}
       </Grid>
       <Grid item xs={12} sm={8} md={5} component={Paper} elevation={6} square>
         <Box
@@ -136,9 +93,9 @@ const Login = () => {
             Please enter your credentials to access the system
           </Typography>
           
-          {error && (
+          {(error || localError) && (
             <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
-              {error}
+              {error || localError}
             </Alert>
           )}
           
@@ -147,13 +104,13 @@ const Login = () => {
               margin="normal"
               required
               fullWidth
-              id="username"
-              label="Username"
-              name="username"
-              autoComplete="username"
+              id="email"
+              label="Email Address"
+              name="email"
+              autoComplete="email"
               autoFocus
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
             <TextField
               margin="normal"
@@ -186,35 +143,21 @@ const Login = () => {
               </Select>
             </FormControl>
             
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
-              <FormControlLabel
-                control={
-                  <Checkbox 
-                    value="remember" 
-                    color="primary" 
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
-                }
-                label="Remember me"
-              />
-              <Link to="/register" variant="body2" style={{ color: '#1976d2' }}>
-              Forgot password?
-                  </Link>
-              
-            </Box>
-            
             <Button
               type="submit"
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2, py: 1.5 }}
-              disabled={isLoading}
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              Sign In
             </Button>
             
-            <Grid container justifyContent="center">
+            <Grid container justifyContent="space-between">
+              <Grid item>
+                <Link to="/forgot-password" variant="body2" style={{ color: '#1976d2' }}>
+                  Forgot password?
+                </Link>
+              </Grid>
               <Grid item>
                 <Typography variant="body2">
                   Don't have an account?{' '}

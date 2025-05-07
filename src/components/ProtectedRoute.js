@@ -1,20 +1,25 @@
-// src/components/ProtectedRoute.jsx
-import React, { useContext } from 'react';
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { AuthContext } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { currentUser, isAuthenticated } = useContext(AuthContext);
+  const { currentUser, isAuthenticated } = useAuth();
   const location = useLocation();
 
-  if (!isAuthenticated) {
-    // Redirect to login if not authenticated
+  console.log('ProtectedRoute check:', {
+    isAuthenticated,
+    currentUser,
+    allowedRoles,
+    currentPath: location.pathname,
+  });
+
+  if (!isAuthenticated || !currentUser) {
+    console.warn('Not authenticated, redirecting to /login');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Check if user has required role
   if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
-    // Redirect to a "not authorized" page or the appropriate dashboard
+    console.warn(`Role ${currentUser.role} not allowed, redirecting to /${currentUser.role}-dashboard`);
     return <Navigate to={`/${currentUser.role}-dashboard`} replace />;
   }
 
