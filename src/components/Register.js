@@ -9,7 +9,6 @@ import {
   Box,
   Typography,
   Container,
-  Paper,
   Alert,
   MenuItem,
   Select,
@@ -17,7 +16,8 @@ import {
   FormControl,
   FormHelperText,
   Checkbox,
-  FormControlLabel
+  FormControlLabel,
+  CircularProgress
 } from '@mui/material';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import { useFormik } from 'formik';
@@ -71,6 +71,8 @@ const Register = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [localError, setLocalError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
   const formik = useFormik({
     initialValues: {
@@ -85,22 +87,42 @@ const Register = () => {
       agreeTerms: false
     },
     validationSchema: validationSchema,
-    onSubmit: async (values, { setSubmitting }) => {
+    onSubmit: async (values) => {
       setLocalError('');
-      console.log('Register attempt:', values);
+      setIsSubmitting(true);
+      
       try {
+        // Log the exact data being sent for registration
+        console.log('Register attempt with data:', values);
+        
         const result = await register(values);
         console.log('Register response:', result);
+        
         if (result.success) {
-          navigate('/login');
+          setRegistrationSuccess(true);
+          setTimeout(() => {
+            navigate('/login');
+          }, 1500);
         } else {
-          setLocalError(result.error || 'Registration failed');
+          setLocalError(result.error || 'Registration failed for an unknown reason');
         }
       } catch (err) {
         console.error('Register error:', err);
-        setLocalError(err.response?.data?.message || err.message || 'An unexpected error occurred. Please try again later.');
+        
+        // Better error message handling
+        let errorMessage = 'Registration failed. Please try again.';
+        
+        if (err.message && err.message.includes('firstName') && err.message.includes('lastName')) {
+          errorMessage = 'First name and last name are required.';
+        } else if (err.message && err.message.includes('duplicate key')) {
+          errorMessage = 'A user with this email already exists.';
+        } else if (err.message) {
+          errorMessage = err.message;
+        }
+        
+        setLocalError(errorMessage);
       } finally {
-        setSubmitting(false);
+        setIsSubmitting(false);
       }
     },
   });
@@ -230,200 +252,228 @@ const Register = () => {
             </Typography>
           </Box>
           
-          <Box
-            component="form"
-            noValidate
-            onSubmit={formik.handleSubmit}
-            sx={{ mt: 2 }}
-          >
-            {localError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {localError}
-              </Alert>
-            )}
-            
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  name="firstName"
-                  required
-                  fullWidth
-                  id="firstName"
-                  label="First Name"
-                  autoFocus
-                  value={formik.values.firstName}
-                  onChange={formik.handleChange}
-                  error={formik.touched.firstName && Boolean(formik.errors.firstName)}
-                  helperText={formik.touched.firstName && formik.errors.firstName}
-                />
-              </Grid>
-              
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  required
-                  fullWidth
-                  id="lastName"
-                  label="Last Name"
-                  name="lastName"
-                  value={formik.values.lastName}
-                  onChange={formik.handleChange}
-                  error={formik.touched.lastName && Boolean(formik.errors.lastName)}
-                  helperText={formik.touched.lastName && formik.errors.lastName}
-                />
-              </Grid>
-              
-              <Grid item xs={12}>
-                <TextField
-                  required
-                  fullWidth
-                  id="email"
-                  label="Email Address"
-                  name="email"
-                  value={formik.values.email}
-                  onChange={formik.handleChange}
-                  error={formik.touched.email && Boolean(formik.errors.email)}
-                  helperText={formik.touched.email && formik.errors.email}
-                />
-              </Grid>
-              
-              <Grid item xs={12}>
-                <TextField
-                  required
-                  fullWidth
-                  name="password"
-                  label="Password"
-                  type="password"
-                  id="password"
-                  value={formik.values.password}
-                  onChange={formik.handleChange}
-                  error={formik.touched.password && Boolean(formik.errors.password)}
-                  helperText={formik.touched.password && formik.errors.password}
-                />
-              </Grid>
-              
-              <Grid item xs={12}>
-                <TextField
-                  required
-                  fullWidth
-                  name="confirmPassword"
-                  label="Confirm Password"
-                  type="password"
-                  id="confirmPassword"
-                  value={formik.values.confirmPassword}
-                  onChange={formik.handleChange}
-                  error={formik.touched.confirmPassword && Boolean(formik.errors.confirmPassword)}
-                  helperText={formik.touched.confirmPassword && formik.errors.confirmPassword}
-                />
-              </Grid>
-              
-              <Grid item xs={12}>
-                <FormControl 
-                  fullWidth 
-                  required 
-                  error={formik.touched.role && Boolean(formik.errors.role)}
-                >
-                  <InputLabel id="role-label">Role</InputLabel>
-                  <Select
-                    labelId="role-label"
-                    id="role"
-                    name="role"
-                    value={formik.values.role}
-                    label="Role"
-                    onChange={formik.handleChange}
-                  >
-                    <MenuItem value="admin">Administrator</MenuItem>
-                    <MenuItem value="doctor">Doctor</MenuItem>
-                    <MenuItem value="nurse">Nurse</MenuItem>
-                    <MenuItem value="staff">Staff</MenuItem>
-                  </Select>
-                  {formik.touched.role && formik.errors.role && (
-                    <FormHelperText>{formik.errors.role}</FormHelperText>
-                  )}
-                </FormControl>
-              </Grid>
-              
-              {formik.values.role === 'doctor' && (
-                <>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      id="specialization"
-                      label="Medical Specialization"
-                      name="specialization"
-                      value={formik.values.specialization}
-                      onChange={formik.handleChange}
-                      error={formik.touched.specialization && Boolean(formik.errors.specialization)}
-                      helperText={formik.touched.specialization && formik.errors.specialization}
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      id="licenseNumber"
-                      label="License Number"
-                      name="licenseNumber"
-                      value={formik.values.licenseNumber}
-                      onChange={formik.handleChange}
-                      error={formik.touched.licenseNumber && Boolean(formik.errors.licenseNumber)}
-                      helperText={formik.touched.licenseNumber && formik.errors.licenseNumber}
-                    />
-                  </Grid>
-                </>
+          {registrationSuccess ? (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Registration successful! Redirecting to login...
+            </Alert>
+          ) : (
+            <Box
+              component="form"
+              noValidate
+              onSubmit={formik.handleSubmit}
+              sx={{ mt: 2 }}
+            >
+              {localError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {localError}
+                </Alert>
               )}
               
-              <Grid item xs={12}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      name="agreeTerms"
-                      checked={formik.values.agreeTerms}
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    name="firstName"
+                    required
+                    fullWidth
+                    id="firstName"
+                    label="First Name"
+                    autoFocus
+                    value={formik.values.firstName}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    error={formik.touched.firstName && Boolean(formik.errors.firstName)}
+                    helperText={formik.touched.firstName && formik.errors.firstName}
+                    disabled={isSubmitting}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    required
+                    fullWidth
+                    id="lastName"
+                    label="Last Name"
+                    name="lastName"
+                    value={formik.values.lastName}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    error={formik.touched.lastName && Boolean(formik.errors.lastName)}
+                    helperText={formik.touched.lastName && formik.errors.lastName}
+                    disabled={isSubmitting}
+                  />
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <TextField
+                    required
+                    fullWidth
+                    id="email"
+                    label="Email Address"
+                    name="email"
+                    value={formik.values.email}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    error={formik.touched.email && Boolean(formik.errors.email)}
+                    helperText={formik.touched.email && formik.errors.email}
+                    disabled={isSubmitting}
+                  />
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <TextField
+                    required
+                    fullWidth
+                    name="password"
+                    label="Password"
+                    type="password"
+                    id="password"
+                    value={formik.values.password}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    error={formik.touched.password && Boolean(formik.errors.password)}
+                    helperText={formik.touched.password && formik.errors.password}
+                    disabled={isSubmitting}
+                  />
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <TextField
+                    required
+                    fullWidth
+                    name="confirmPassword"
+                    label="Confirm Password"
+                    type="password"
+                    id="confirmPassword"
+                    value={formik.values.confirmPassword}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    error={formik.touched.confirmPassword && Boolean(formik.errors.confirmPassword)}
+                    helperText={formik.touched.confirmPassword && formik.errors.confirmPassword}
+                    disabled={isSubmitting}
+                  />
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <FormControl 
+                    fullWidth 
+                    required 
+                    error={formik.touched.role && Boolean(formik.errors.role)}
+                    disabled={isSubmitting}
+                  >
+                    <InputLabel id="role-label">Role</InputLabel>
+                    <Select
+                      labelId="role-label"
+                      id="role"
+                      name="role"
+                      value={formik.values.role}
+                      label="Role"
                       onChange={formik.handleChange}
-                      color="primary"
-                    />
-                  }
-                  label="I agree to the terms and conditions"
-                />
-                {formik.touched.agreeTerms && formik.errors.agreeTerms && (
-                  <FormHelperText error>{formik.errors.agreeTerms}</FormHelperText>
+                      onBlur={formik.handleBlur}
+                    >
+                      <MenuItem value="admin">Administrator</MenuItem>
+                      <MenuItem value="doctor">Doctor</MenuItem>
+                      <MenuItem value="nurse">Nurse</MenuItem>
+                      <MenuItem value="staff">Staff</MenuItem>
+                    </Select>
+                    {formik.touched.role && formik.errors.role && (
+                      <FormHelperText>{formik.errors.role}</FormHelperText>
+                    )}
+                  </FormControl>
+                </Grid>
+                
+                {formik.values.role === 'doctor' && (
+                  <>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        id="specialization"
+                        label="Medical Specialization"
+                        name="specialization"
+                        value={formik.values.specialization}
+                        onChange={formik.handleChange}
+                        onBlur={formik.handleBlur}
+                        error={formik.touched.specialization && Boolean(formik.errors.specialization)}
+                        helperText={formik.touched.specialization && formik.errors.specialization}
+                        disabled={isSubmitting}
+                      />
+                    </Grid>
+                    
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        id="licenseNumber"
+                        label="License Number"
+                        name="licenseNumber"
+                        value={formik.values.licenseNumber}
+                        onChange={formik.handleChange}
+                        onBlur={formik.handleBlur}
+                        error={formik.touched.licenseNumber && Boolean(formik.errors.licenseNumber)}
+                        helperText={formik.touched.licenseNumber && formik.errors.licenseNumber}
+                        disabled={isSubmitting}
+                      />
+                    </Grid>
+                  </>
                 )}
+                
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        name="agreeTerms"
+                        checked={formik.values.agreeTerms}
+                        onChange={formik.handleChange}
+                        onBlur={formik.handleBlur}
+                        color="primary"
+                        disabled={isSubmitting}
+                      />
+                    }
+                    label="I agree to the terms and conditions"
+                  />
+                  {formik.touched.agreeTerms && formik.errors.agreeTerms && (
+                    <FormHelperText error>{formik.errors.agreeTerms}</FormHelperText>
+                  )}
+                </Grid>
               </Grid>
-            </Grid>
-            
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              sx={{ 
-                mt: 3, 
-                mb: 2, 
-                py: 1.5, 
-                bgcolor: '#2484E4',
-                fontSize: '1rem',
-                '&:hover': {
-                  bgcolor: '#1976d2'
-                }
-              }}
-              disabled={formik.isSubmitting}
-            >
-              REGISTER
-            </Button>
-            
-            <Grid container justifyContent="center">
-              <Grid item>
-                <Link 
-                  to="/login" 
-                  style={{ 
-                    color: '#2484E4', 
-                    textDecoration: 'none', 
-                    fontWeight: 500 
-                  }}
-                >
-                  Already have an account? Sign in
-                </Link>
+              
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                sx={{ 
+                  mt: 3, 
+                  mb: 2, 
+                  py: 1.5, 
+                  bgcolor: '#2484E4',
+                  fontSize: '1rem',
+                  '&:hover': {
+                    bgcolor: '#1976d2'
+                  }
+                }}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : (
+                  'REGISTER'
+                )}
+              </Button>
+              
+              <Grid container justifyContent="center">
+                <Grid item>
+                  <Link 
+                    to="/login" 
+                    style={{ 
+                      color: '#2484E4', 
+                      textDecoration: 'none', 
+                      fontWeight: 500 
+                    }}
+                  >
+                    Already have an account? Sign in
+                  </Link>
+                </Grid>
               </Grid>
-            </Grid>
-          </Box>
+            </Box>
+          )}
         </Container>
       </Grid>
     </Grid>

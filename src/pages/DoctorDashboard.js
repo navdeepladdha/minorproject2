@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchDoctorData, fetchPatientDetails, createPrescription } from '../services/api';
+import { fetchDoctorDashboard, fetchPatientDetails, createPrescription, updateLeaveStatus } from '../services/api';
 import {
   Box,
   Typography,
@@ -21,7 +21,7 @@ import {
   Select,
   InputLabel,
   FormControl,
-  FormHelperText
+  FormHelperText,
 } from '@mui/material';
 import { useFormik } from 'formik';
 import * as yup from 'yup';
@@ -30,12 +30,12 @@ const prescriptionValidationSchema = yup.object({
   patientId: yup.string().required('Patient is required'),
   medication: yup.string().required('Medication is required'),
   dosage: yup.string().required('Dosage is required'),
-  instructions: yup.string().required('Instructions are required')
+  instructions: yup.string().required('Instructions are required'),
 });
 
 const DoctorDashboard = () => {
   const { currentUser } = useAuth();
-  const [data, setData] = useState({ patients: [], appointments: [] });
+  const [data, setData] = useState({ patients: [], appointments: [], leaves: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -46,9 +46,13 @@ const DoctorDashboard = () => {
     const loadData = async () => {
       try {
         console.log('Fetching doctor data with token:', currentUser?.token);
-        const result = await fetchDoctorData(currentUser?.token);
+        const result = await fetchDoctorDashboard(currentUser?.token);
         console.log('Doctor data received:', result);
-        setData(result);
+        setData({
+          patients: result.patients || [],
+          appointments: result.appointments || [],
+          leaves: result.leaves || [], // Include leaves
+        });
       } catch (err) {
         setError('Failed to load doctor data');
         console.error('Doctor data error:', err);
@@ -92,12 +96,27 @@ const DoctorDashboard = () => {
     prescriptionFormik.resetForm();
   };
 
+  const handleLeaveStatusUpdate = async (leaveId, status) => {
+    try {
+      await updateLeaveStatus(leaveId, status, currentUser?.token);
+      const result = await fetchDoctorDashboard(currentUser?.token);
+      setData({
+        patients: result.patients || [],
+        appointments: result.appointments || [],
+        leaves: result.leaves || [],
+      });
+    } catch (err) {
+      setError(`Failed to update leave status: ${err.response?.data?.message || err.message}`);
+      console.error('Leave status update error:', err);
+    }
+  };
+
   const prescriptionFormik = useFormik({
     initialValues: {
       patientId: '',
       medication: '',
       dosage: '',
-      instructions: ''
+      instructions: '',
     },
     validationSchema: prescriptionValidationSchema,
     onSubmit: async (values, { setSubmitting }) => {
@@ -107,13 +126,19 @@ const DoctorDashboard = () => {
         console.log('Prescription created successfully');
         setPrescriptionModalOpen(false);
         prescriptionFormik.resetForm();
+        const result = await fetchDoctorDashboard(currentUser?.token);
+        setData({
+          patients: result.patients || [],
+          appointments: result.appointments || [],
+          leaves: result.leaves || [],
+        });
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to create prescription');
         console.error('Prescription error:', err);
       } finally {
         setSubmitting(false);
       }
-    }
+    },
   });
 
   if (loading) return (
@@ -216,6 +241,70 @@ const DoctorDashboard = () => {
             </TableContainer>
           </Paper>
         </Grid>
+
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3, borderRadius: 2, boxShadow: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'medium' }}>
+              Nurse Leave Applications
+            </Typography>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Nurse</TableCell>
+                    <TableCell>Start Date</TableCell>
+                    <TableCell>End Date</TableCell>
+                    <TableCell>Reason</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {data.leaves && data.leaves.length > 0 ? (
+                    data.leaves.map((leave) => (
+                      <TableRow key={leave._id} hover>
+                        <TableCell>{leave.nurseName || 'N/A'}</TableCell>
+                        <TableCell>{leave.startDate}</TableCell>
+                        <TableCell>{leave.endDate}</TableCell>
+                        <TableCell>{leave.reason}</TableCell>
+                        <TableCell>{leave.status}</TableCell>
+                        <TableCell>
+                          {leave.status === 'pending' && (
+                            <>
+                              <Button
+                                variant="contained"
+                                color="success"
+                                size="small"
+                                onClick={() => handleLeaveStatusUpdate(leave._id, 'approved')}
+                                sx={{ mr: 1 }}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                variant="contained"
+                                color="error"
+                                size="small"
+                                onClick={() => handleLeaveStatusUpdate(leave._id, 'rejected')}
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center">
+                        No leave applications available
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        </Grid>
       </Grid>
 
       <Paper sx={{ mt: 3, p: 3, borderRadius: 2, boxShadow: 3 }}>
@@ -281,7 +370,7 @@ const DoctorDashboard = () => {
             bgcolor: 'background.paper',
             boxShadow: 24,
             p: 4,
-            borderRadius: 2
+            borderRadius: 2,
           }}
         >
           <Typography variant="h6" sx={{ mb: 2 }}>
@@ -345,14 +434,18 @@ const DoctorDashboard = () => {
             bgcolor: 'background.paper',
             boxShadow: 24,
             p: 4,
-            borderRadius: 2
+            borderRadius: 2,
           }}
         >
           <Typography variant="h6" sx={{ mb: 2 }}>
             Create Prescription
           </Typography>
           <Box component="form" onSubmit={prescriptionFormik.handleSubmit}>
-            <FormControl fullWidth margin="normal" error={prescriptionFormik.touched.patientId && Boolean(prescriptionFormik.errors.patientId)}>
+            <FormControl
+              fullWidth
+              margin="normal"
+              error={prescriptionFormik.touched.patientId && Boolean(prescriptionFormik.errors.patientId)}
+            >
               <InputLabel id="patient-label">Patient</InputLabel>
               <Select
                 labelId="patient-label"

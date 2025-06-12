@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchNurseData, updatePatientVitals } from '../services/api';
+import { fetchNurseDashboard, updateVitals, submitLeaveApplication } from '../services/api';
 import {
   Box,
   Typography,
@@ -19,29 +19,58 @@ import {
   CircularProgress,
   Alert,
   Modal,
-  TextField
+  TextField,
 } from '@mui/material';
+import { useFormik } from 'formik';
+import * as yup from 'yup';
+
+// Validation schema for leave application
+const leaveValidationSchema = yup.object({
+  startDate: yup.date().required('Start date is required'),
+  endDate: yup
+    .date()
+    .required('End date is required')
+    .min(yup.ref('startDate'), 'End date must be after start date'),
+  reason: yup.string().required('Reason is required').min(5, 'Reason must be at least 5 characters'),
+});
 
 const NurseDashboard = () => {
   const { currentUser } = useAuth();
   const [data, setData] = useState({ patientVitals: [], medications: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [vitalsModalOpen, setVitalsModalOpen] = useState(false);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const [vitalsForm, setVitalsForm] = useState({
-    patientId: '',
+    patient: '',
     bp: '',
     temp: '',
-    pulse: ''
+    pulse: '',
   });
 
   useEffect(() => {
     const loadData = async () => {
       try {
         console.log('Fetching nurse data with token:', currentUser?.token);
-        const result = await fetchNurseData(currentUser?.token);
+        const result = await fetchNurseDashboard(currentUser?.token);
         console.log('Nurse data received:', result);
-        setData(result);
+        const vitals = Array.isArray(result?.vitals) ? result.vitals : [];
+        const tasks = Array.isArray(result?.tasks) ? result.tasks : [];
+        setData({
+          patientVitals: vitals.map((vital) => ({
+            ...vital,
+            patient: vital.patient,
+            bp: vital.bp,
+            temp: vital.temp,
+            pulse: vital.pulse,
+          })),
+          medications: tasks.map((task) => ({
+            patient: task.patientId,
+            medication: task.name,
+            dosage: 'N/A',
+            schedule: task.dueDate,
+          })),
+        });
       } catch (err) {
         setError('Failed to load nurse data');
         console.error('Nurse data error:', err);
@@ -58,14 +87,15 @@ const NurseDashboard = () => {
     }
   }, [currentUser]);
 
-  const handleModalOpen = (patientId) => {
-    setVitalsForm({ patientId, bp: '', temp: '', pulse: '' });
-    setModalOpen(true);
+  // Vitals Modal Handlers
+  const handleVitalsModalOpen = (patient) => {
+    setVitalsForm({ patient, bp: '', temp: '', pulse: '' });
+    setVitalsModalOpen(true);
   };
 
-  const handleModalClose = () => {
-    setModalOpen(false);
-    setVitalsForm({ patientId: '', bp: '', temp: '', pulse: '' });
+  const handleVitalsModalClose = () => {
+    setVitalsModalOpen(false);
+    setVitalsForm({ patient: '', bp: '', temp: '', pulse: '' });
   };
 
   const handleVitalsChange = (e) => {
@@ -77,15 +107,67 @@ const NurseDashboard = () => {
     e.preventDefault();
     try {
       console.log('Updating vitals:', vitalsForm);
-      await updatePatientVitals(vitalsForm.patientId, vitalsForm, currentUser?.token);
-      const result = await fetchNurseData(currentUser?.token);
-      setData(result);
-      handleModalClose();
+      const { patient, bp, temp, pulse } = vitalsForm;
+      await updateVitals(patient, { bp, temp, pulse }, currentUser?.token);
+      const result = await fetchNurseDashboard(currentUser?.token);
+      const vitals = Array.isArray(result?.vitals) ? result.vitals : [];
+      const tasks = Array.isArray(result?.tasks) ? result.tasks : [];
+      setData({
+        patientVitals: vitals.map((vital) => ({
+          ...vital,
+          patient: vital.patient,
+          bp: vital.bp,
+          temp: vital.temp,
+          pulse: vital.pulse,
+        })),
+        medications: tasks.map((task) => ({
+          patient: task.patientId,
+          medication: task.name,
+          dosage: 'N/A',
+          schedule: task.dueDate,
+        })),
+      });
+      handleVitalsModalClose();
     } catch (err) {
       setError('Failed to update vitals');
       console.error('Vitals update error:', err);
     }
   };
+
+  // Leave Modal Handlers
+  const handleLeaveModalOpen = () => {
+    setLeaveModalOpen(true);
+  };
+
+  const handleLeaveModalClose = () => {
+    setLeaveModalOpen(false);
+    leaveFormik.resetForm();
+  };
+
+  // Formik for leave application
+  const leaveFormik = useFormik({
+    initialValues: {
+      startDate: '',
+      endDate: '',
+      reason: '',
+    },
+    validationSchema: leaveValidationSchema,
+    onSubmit: async (values, { setSubmitting }) => {
+      try {
+        console.log('Submitting leave application:', values);
+        await submitLeaveApplication(values, currentUser?.token);
+        leaveFormik.setStatus({ success: 'Leave application submitted successfully!' });
+        setTimeout(() => {
+          handleLeaveModalClose();
+        }, 1500);
+      } catch (err) {
+        leaveFormik.setStatus({ error: err.response?.data?.message || 'Failed to submit leave application.' });
+        console.error('Leave application error:', err);
+      } finally {
+        setSubmitting(false);
+      }
+    },
+  });
 
   if (loading) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -126,15 +208,15 @@ const NurseDashboard = () => {
                   {data.patientVitals && data.patientVitals.length > 0 ? (
                     data.patientVitals.map((vital) => (
                       <TableRow key={vital._id} hover>
-                        <TableCell>{vital.patient}</TableCell>
-                        <TableCell>{vital.bp}</TableCell>
-                        <TableCell>{vital.temp}</TableCell>
-                        <TableCell>{vital.pulse}</TableCell>
+                        <TableCell>{vital.patient || 'N/A'}</TableCell>
+                        <TableCell>{vital.bp || 'N/A'}</TableCell>
+                        <TableCell>{vital.temp || 'N/A'}</TableCell>
+                        <TableCell>{vital.pulse || 'N/A'}</TableCell>
                         <TableCell>
                           <Button
                             variant="outlined"
                             size="small"
-                            onClick={() => handleModalOpen(vital.patient)}
+                            onClick={() => handleVitalsModalOpen(vital.patient)}
                           >
                             Update Vitals
                           </Button>
@@ -226,7 +308,26 @@ const NurseDashboard = () => {
         </Grid>
       </Paper>
 
-      <Modal open={modalOpen} onClose={handleModalClose}>
+      <Paper sx={{ mt: 3, p: 3, borderRadius: 2, boxShadow: 3 }}>
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'medium' }}>
+          Quick Actions
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={6} md={3}>
+            <Button
+              variant="contained"
+              fullWidth
+              color="primary"
+              sx={{ p: 1.5 }}
+              onClick={handleLeaveModalOpen}
+            >
+              Request Leave
+            </Button>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      <Modal open={vitalsModalOpen} onClose={handleVitalsModalClose}>
         <Box
           sx={{
             position: 'absolute',
@@ -237,7 +338,7 @@ const NurseDashboard = () => {
             bgcolor: 'background.paper',
             boxShadow: 24,
             p: 4,
-            borderRadius: 2
+            borderRadius: 2,
           }}
         >
           <Typography variant="h6" sx={{ mb: 2 }}>
@@ -275,7 +376,95 @@ const NurseDashboard = () => {
               <Button type="submit" variant="contained" color="primary">
                 Update
               </Button>
-              <Button variant="outlined" onClick={handleModalClose}>
+              <Button variant="outlined" onClick={handleVitalsModalClose}>
+                Cancel
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      </Modal>
+
+      <Modal open={leaveModalOpen} onClose={handleLeaveModalClose}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 400,
+            bgcolor: 'background.paper',
+            boxShadow: 24,
+            p: 4,
+            borderRadius: 2,
+          }}
+        >
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Request Leave
+          </Typography>
+          {leaveFormik.status?.error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {leaveFormik.status.error}
+            </Alert>
+          )}
+          {leaveFormik.status?.success && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {leaveFormik.status.success}
+            </Alert>
+          )}
+          <Box component="form" onSubmit={leaveFormik.handleSubmit}>
+            <TextField
+              fullWidth
+              label="Start Date"
+              name="startDate"
+              type="date"
+              value={leaveFormik.values.startDate}
+              onChange={leaveFormik.handleChange}
+              error={leaveFormik.touched.startDate && Boolean(leaveFormik.errors.startDate)}
+              helperText={leaveFormik.touched.startDate && leaveFormik.errors.startDate}
+              margin="normal"
+              required
+              InputLabelProps={{ shrink: true }}
+            />
+            <TextField
+              fullWidth
+              label="End Date"
+              name="endDate"
+              type="date"
+              value={leaveFormik.values.endDate}
+              onChange={leaveFormik.handleChange}
+              error={leaveFormik.touched.endDate && Boolean(leaveFormik.errors.endDate)}
+              helperText={leaveFormik.touched.endDate && leaveFormik.errors.endDate}
+              margin="normal"
+              required
+              InputLabelProps={{ shrink: true }}
+            />
+            <TextField
+              fullWidth
+              label="Reason"
+              name="reason"
+              value={leaveFormik.values.reason}
+              onChange={leaveFormik.handleChange}
+              error={leaveFormik.touched.reason && Boolean(leaveFormik.errors.reason)}
+              helperText={leaveFormik.touched.reason && leaveFormik.errors.reason}
+              margin="normal"
+              required
+              multiline
+              rows={4}
+            />
+            <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                disabled={leaveFormik.isSubmitting || leaveFormik.status?.success}
+              >
+                {leaveFormik.isSubmitting ? <CircularProgress size={24} /> : 'Submit'}
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={handleLeaveModalClose}
+                disabled={leaveFormik.isSubmitting}
+              >
                 Cancel
               </Button>
             </Box>

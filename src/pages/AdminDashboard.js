@@ -53,7 +53,7 @@ const AdminDashboard = () => {
         console.log('Admin data received:', result);
         setData(result);
       } catch (err) {
-        setError('Failed to load admin data');
+        setError(`Failed to load admin data: ${err.message || err.response?.data?.message || 'Unknown error'}`); // Improved error message
         console.error('Admin data error:', err);
       } finally {
         setLoading(false);
@@ -88,7 +88,7 @@ const AdminDashboard = () => {
       setData(result);
       handleModalClose();
     } catch (err) {
-      setError('Failed to create department');
+      setError(`Failed to create department: ${err.message || err.response?.data?.message || 'Unknown error'}`); // Improved error message
       console.error('Department creation error:', err);
     }
   };
